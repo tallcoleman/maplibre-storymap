@@ -6,6 +6,7 @@
     <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
     <script src="dist/bundle.js"></script>
     <link href='./dist/maplibre-gl.css' rel='stylesheet' />
+    <link rel="stylesheet" href="./assets/css/custom.css" />
     <style>
         body {
             margin: 0;
@@ -35,7 +36,7 @@
             position: fixed;
             z-index: 1;
             opacity: 1;
-            border: 1px solid rgb(100, 100, 100);
+            /* border: 1px solid rgb(100, 100, 100); */
             transition: opacity 0.5s ease-in-out;
             pointer-events: none;
         }
@@ -294,9 +295,13 @@
     <div id="map"></div>
     <div id="mapInset"></div>
     <div id="story"></div>
+    <div id="progress-control"></div>
     <script src="./config.js"></script>
     <script src="./sources.js"></script>
+    <script src="assets/js/custom.js"></script>
     <script>
+        const myControl = new ProgressControl("progress-control", window.config);
+
         var initLoad = true;
         var layerTypes = {
             'fill': ['fill-opacity'],
@@ -566,6 +571,105 @@
         // instantiate the scrollama
         var scroller = scrollama();
 
+        // utility functions for chapter changes
+        /**
+         * Scrollama Response Object
+         * @typedef {Object} scrollamaResponse
+         * @property {DOMElement} element
+         * @property {number} index
+         * @property {("up"|"down")} direction
+         */
+        /**
+         * Open a chapter
+         * @param {scrollamaResponse} response
+         */
+        async function openChapter(response) {
+            const chapterIndex = config.chapters.findIndex(chap => chap.id === response.element.id);
+            myControl.index = chapterIndex;
+
+            var chapter = config.chapters.find(chap => chap.id === response.element.id);
+
+            // add legend to each chapter
+            if (config.legend && !config.inset) {
+                for (i = 0; i < config.chapters.length; i++) {
+                    if (config.chapters[i].legend != undefined) {
+                        if (config.chapters[i].id == response.element.id) {
+                            document.getElementById(config.chapters[i].id + "Legend").style.display = "block";
+                        } else {
+                            document.getElementById(config.chapters[i].id + "Legend").style.display = "none";
+                        }
+                    }
+                };
+            }
+
+            response.element.classList.add('active');
+            map[chapter.mapAnimation || 'flyTo'](chapter.location);
+            // Incase you do not want to have a dynamic inset map,
+            // rather want to keep it a static view but still change the
+            // bbox as main map move: comment out the below if section.
+            if (config.inset && !config.legend) {
+                if (chapter.location.zoom < 5) {
+                    insetMap.flyTo({ center: chapter.location.center, zoom: 0 });
+                }
+                else {
+                    insetMap.flyTo({ center: chapter.location.center, zoom: 3 });
+                }
+            }
+            if (config.showMarkers) {
+                marker.setLngLat(chapter.location.center);
+            }
+            if (chapter.onChapterEnter.length > 0) {
+                chapter.onChapterEnter.forEach(setLayerOpacity);
+            }
+
+            // set interactive properties for chapters set as mapInteractive = true
+            if (chapter.mapInteractive) {
+                map.addControl(navigation);
+                map.dragPan.enable();
+                map.doubleClickZoom.enable();
+                map.getCanvas().style.cursor = 'grab';
+            } else {
+                if (map.hasControl(navigation)) {
+                    map.removeControl(navigation);
+                }
+                map.dragPan.disable();
+                map.doubleClickZoom.disable();
+                map.getCanvas().style.cursor = 'default';
+            }
+            if (chapter.callback) {
+                window[chapter.callback]();
+            }
+            if (chapter.rotateAnimation) {
+                map.once('moveend', () => {
+                    const rotateNumber = map.getBearing();
+                    map.rotateTo(rotateNumber + 180, {
+                        duration: 30000, easing: function (t) {
+                            return t;
+                        }
+                    });
+                });
+            }
+
+            if (chapter.spinGlobe) {
+                map.once('moveend', () => {
+                    const center = map.getCenter();
+                    const newCenter = [center.lng + 360, center.lat];
+                    map.easeTo({ center: newCenter, duration: 20000, easing: n => n });
+                });
+            }
+        }
+        /**
+         * Close a chapter
+         * @param {scrollamaResponse} response
+         */
+        async function closeChapter(response) {
+            var chapter = config.chapters.find(chap => chap.id === response.element.id);
+            response.element.classList.remove('active');
+            if (chapter.onChapterExit.length > 0) {
+                chapter.onChapterExit.forEach(setLayerOpacity);
+            }
+        }
+
         map.on("load", function () {
             if (config.use3dTerrain) {
                 map.addSource('terrainSource', {
@@ -601,85 +705,8 @@
                     offset: 0.5,
                     progress: true
                 })
-                .onStepEnter(async response => {
-                    var chapter = config.chapters.find(chap => chap.id === response.element.id);
-
-                    // add legend to each chapter
-                    if (config.legend && !config.inset) {
-                        for (i = 0; i < config.chapters.length; i++) {
-                            if (config.chapters[i].legend != undefined) {
-                                if (config.chapters[i].id == response.element.id) {
-                                    document.getElementById(config.chapters[i].id + "Legend").style.display = "block";
-                                } else {
-                                    document.getElementById(config.chapters[i].id + "Legend").style.display = "none";
-                                }
-                            }
-                        };
-                    }
-
-                    response.element.classList.add('active');
-                    map[chapter.mapAnimation || 'flyTo'](chapter.location);
-                    // Incase you do not want to have a dynamic inset map,
-                    // rather want to keep it a static view but still change the
-                    // bbox as main map move: comment out the below if section.
-                    if (config.inset && !config.legend) {
-                        if (chapter.location.zoom < 5) {
-                            insetMap.flyTo({ center: chapter.location.center, zoom: 0 });
-                        }
-                        else {
-                            insetMap.flyTo({ center: chapter.location.center, zoom: 3 });
-                        }
-                    }
-                    if (config.showMarkers) {
-                        marker.setLngLat(chapter.location.center);
-                    }
-                    if (chapter.onChapterEnter.length > 0) {
-                        chapter.onChapterEnter.forEach(setLayerOpacity);
-                    }
-
-                    // set interactive properties for chapters set as mapInteractive = true
-                    if (chapter.mapInteractive) {
-                        map.addControl(navigation);
-                        map.dragPan.enable();
-                        map.doubleClickZoom.enable();
-                        map.getCanvas().style.cursor = 'grab';
-                    } else {
-                        if (map.hasControl(navigation)) {
-                            map.removeControl(navigation);
-                        }
-                        map.dragPan.disable();
-                        map.doubleClickZoom.disable();
-                        map.getCanvas().style.cursor = 'default';
-                    }
-                    if (chapter.callback) {
-                        window[chapter.callback]();
-                    }
-                    if (chapter.rotateAnimation) {
-                        map.once('moveend', () => {
-                            const rotateNumber = map.getBearing();
-                            map.rotateTo(rotateNumber + 180, {
-                                duration: 30000, easing: function (t) {
-                                    return t;
-                                }
-                            });
-                        });
-                    }
-
-                    if (chapter.spinGlobe) {
-                        map.once('moveend', () => {
-                            const center = map.getCenter();
-                            const newCenter = [center.lng + 360, center.lat];
-                            map.easeTo({ center: newCenter, duration: 20000, easing: n => n });
-                        });
-                    }
-                })
-                .onStepExit(response => {
-                    var chapter = config.chapters.find(chap => chap.id === response.element.id);
-                    response.element.classList.remove('active');
-                    if (chapter.onChapterExit.length > 0) {
-                        chapter.onChapterExit.forEach(setLayerOpacity);
-                    }
-                });
+                .onStepEnter(openChapter)
+                .onStepExit(closeChapter);
         });
 
         //Helper functions for insetmap
