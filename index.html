@@ -584,6 +584,7 @@
          * @param {scrollamaResponse} response
          */
         async function openChapter(response) {
+            // update button control index on scroll
             const chapterIndex = config.chapters.findIndex(chap => chap.id === response.element.id);
             myControl.index = chapterIndex;
 
@@ -792,6 +793,14 @@
 
         // setup resize event
         window.addEventListener('resize', scroller.resize);
+
+        // update button control index on "Back to top" click
+        document.querySelectorAll('a[href="#header"]')
+            .forEach((el) => {
+            el.addEventListener("click", () => {
+                myControl.index = 0;
+            });
+        });
 
     </script>
 
