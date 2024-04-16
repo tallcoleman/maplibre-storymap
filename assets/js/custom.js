@@ -21,9 +21,10 @@ class ProgressControl {
 
     this.#prevButton.addEventListener("click", this.prevChapter);
     this.#nextButton.addEventListener("click", this.nextChapter);
+    this.updateOnHashChange();
 
     this.container.append(this.#prevButton, this.#nextButton);
-    this.updateControls();    
+    this.updateControls();
   }
 
   set index(i) {
@@ -48,5 +49,38 @@ class ProgressControl {
     const chapter = this.config.chapters[this.#index];
     window.location.href = `#${chapter['id']}`;
     this.updateControls();
+  }
+
+  /**
+   * Utility function to update the index on changes to url hash (keeps control in sync with anchor link clicks, forward/back buttons, etc.)
+   */
+  updateOnHashChange() {
+    window.addEventListener("hashchange", (e) => {
+      const newHash = e.newURL.match(/#([a-zA-Z0-9-_]+$)/)[1];
+      const targetEl = document.getElementById(newHash);
+      let newIndex = Number(targetEl.dataset['scrollamaIndex']);
+  
+      if (!newIndex) {
+          const chapters = this.config.chapters.map(chapter => 
+              document.getElementById(chapter['id'])
+          );
+          let referenceEl = chapters.slice(-1)[0];
+          for (const chapter of chapters) {
+              const position = chapter.compareDocumentPosition(targetEl);
+              if (position == Node.DOCUMENT_POSITION_PRECEDING 
+               || position == Node.DOCUMENT_POSITION_CONTAINED_BY
+               || position == Node.DOCUMENT_POSITION_CONTAINS) {
+                  referenceEl = chapter;
+                  break;
+              } else if (position == Node.DOCUMENT_POSITION_FOLLOWING) {
+                  continue;
+              } else {
+                  return; // do nothing
+              }
+          }
+          newIndex = Number(referenceEl.dataset['scrollamaIndex']);
+      }
+      this.index = newIndex;
+    });
   }
 }
